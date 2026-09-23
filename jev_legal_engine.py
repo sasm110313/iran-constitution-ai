@@ -2,13 +2,9 @@ import asyncio
 import os
 import json
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import httpx
 
-TYPESAFE_API_KEY = os.getenv(
-    "TYPESAFE_API_KEY",
-    "apikey_20341ef74446864ceaa363b376da413038_d070ce2dc3cbca67c6eb2230d791754d859e6122e1d34f7ea465356eda6eb8c4"
-)
 TYPESAFE_API_URL = "https://api.typesafe.ai/v1/systemone"
 CONSTITUTION_DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "constitution_fa.json")
 
@@ -22,7 +18,8 @@ class JevLegalEngine:
         client: httpx.AsyncClient, 
         semaphore: asyncio.Semaphore, 
         article: Dict[str, Any], 
-        query: str
+        query: str,
+        api_key: str
     ) -> Dict[str, Any]:
         async with semaphore:
             payload = {
@@ -53,7 +50,7 @@ class JevLegalEngine:
                             "right_grant": "اعطای حق یا آزادی مصرح به شهروندان",
                             "obligation": "ایجاد تکلیف یا مسئولیت اجباری برای دولت یا نهادها",
                             "prohibition": "منع قانونی، ممنوعیت مطلق یا جرم‌انگاری",
-                            "procedural": "تعیین ساختار، مهلت زمانی، مرجع صالح یا آیین اجرا",
+                            "procedural": "تعیین ساختار، مهلت زمانی، مرجع صالح یا نحوه اجرا",
                             "none": "هیچ‌کدام"
                         }
                     }
@@ -61,7 +58,7 @@ class JevLegalEngine:
             }
             
             headers = {
-                "Authorization": f"Bearer {TYPESAFE_API_KEY}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             }
             
@@ -88,13 +85,25 @@ class JevLegalEngine:
                     "score": 0.0
                 }
 
-    async def search(self, query: str, threshold: float = 0.55, max_concurrency: int = 30) -> Dict[str, Any]:
+    async def search(
+        self, 
+        query: str, 
+        api_key: Optional[str] = None, 
+        threshold: float = 0.55, 
+        max_concurrency: int = 30
+    ) -> Dict[str, Any]:
+        # Use provided api_key or environment variable
+        effective_key = api_key or os.getenv("TYPESAFE_API_KEY", "").strip()
+        
+        if not effective_key:
+            raise ValueError("کلید API تعریف نشده است. لطفاً کلید API خود را در تنظیمات وب‌سایت یا متغیر محیطی TYPESAFE_API_KEY وارد نمایید.")
+            
         start_time = time.time()
         semaphore = asyncio.Semaphore(max_concurrency)
         
         async with httpx.AsyncClient() as client:
             tasks = [
-                self.evaluate_single_article(client, semaphore, art, query)
+                self.evaluate_single_article(client, semaphore, art, query, effective_key)
                 for art in self.articles
             ]
             results = await asyncio.gather(*tasks)
@@ -108,7 +117,6 @@ class JevLegalEngine:
         total_input_tokens = sum(r.get("tokens", {}).get("input_tokens", 0) for r in results)
         total_output_tokens = sum(r.get("tokens", {}).get("output_tokens", 0) for r in results)
         
-        # Approximate cost calculation for Jev System One tokens
         approx_cost_usd = (total_input_tokens * 0.0000001) + (total_output_tokens * 0.0000003)
         
         return {
