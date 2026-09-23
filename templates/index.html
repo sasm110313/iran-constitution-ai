@@ -57,10 +57,12 @@
                     پایگاه ۱۷۷ اصل قانون اساسی
                 </span>
                 
-                <!-- API Key Config Button -->
-                <button onclick="toggleKeyModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-md text-xs font-semibold border border-amber-400/30 transition">
+                {% if not server_mode %}
+                <!-- API Key Config Button (Hidden in Server Production Mode) -->
+                <button id="key-config-btn" onclick="toggleKeyModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-md text-xs font-semibold border border-amber-400/30 transition">
                     🔑 <span id="key-btn-text">تنظیم کلید API</span>
                 </button>
+                {% endif %}
 
                 <button onclick="window.print()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-md text-xs font-medium border border-white/20 transition">
                     🖨️ چاپ گزارش
@@ -69,6 +71,7 @@
         </div>
     </header>
 
+    {% if not server_mode %}
     <!-- Modal: API Key Setup -->
     <div id="key-modal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
@@ -80,7 +83,7 @@
             </div>
             
             <p class="text-xs text-slate-600 leading-relaxed mb-4">
-                برای انجام استعلامات هوشمند حقوقی، کلید API خود را در کادر زیر وارد کنید. این کلید در مرورگر شما (Local Storage) ذخیره گردیده و به گیت‌هاب یا سرور عمومی ارسال نخواهد شد.
+                برای انجام استعلامات هوشمند حقوقی، کلید API خود را در کادر زیر وارد کنید. این کلید در مرورگر شما ذخیره گردیده و به سرور عمومی یا گیت‌هاب افشا نخواهد شد.
             </p>
 
             <label class="block text-xs font-bold text-slate-700 mb-1">کلید API شما (شروع با apikey_):</label>
@@ -97,10 +100,12 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-6 py-8 flex-1 w-full">
 
+        {% if not server_mode %}
         <!-- API Key Warning Banner if Key Missing -->
         <div id="key-warning-banner" class="hidden mb-6 p-4 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex flex-wrap items-center justify-between gap-3 shadow-sm">
             <div class="flex items-center gap-2">
@@ -111,6 +116,7 @@
                 تنظیم کلید API
             </button>
         </div>
+        {% endif %}
 
         <!-- Mode Tabs & Search Box -->
         <div class="official-card rounded-xl p-6 md:p-8 mb-8">
@@ -286,34 +292,41 @@
 
     <!-- Logic Script -->
     <script>
+        const SERVER_MODE = {{ 'true' if server_mode else 'false' }};
         let currentSearchData = null;
         let activeTab = 'search';
 
         document.addEventListener('DOMContentLoaded', () => {
-            checkApiKeyStatus();
+            if (!SERVER_MODE) {
+                checkApiKeyStatus();
+            }
         });
 
         function checkApiKeyStatus() {
+            if (SERVER_MODE) return;
             const storedKey = localStorage.getItem('typesafe_api_key');
             const keyBtnText = document.getElementById('key-btn-text');
             const warningBanner = document.getElementById('key-warning-banner');
 
             if (storedKey) {
-                keyBtnText.innerText = 'کلید API ثبت‌شده';
+                if (keyBtnText) keyBtnText.innerText = 'کلید API ثبت‌شده';
                 if (warningBanner) warningBanner.classList.add('hidden');
-                document.getElementById('api-key-input').value = storedKey;
+                const keyInput = document.getElementById('api-key-input');
+                if (keyInput) keyInput.value = storedKey;
             } else {
-                keyBtnText.innerText = 'تنظیم کلید API';
+                if (keyBtnText) keyBtnText.innerText = 'تنظیم کلید API';
                 if (warningBanner) warningBanner.classList.remove('hidden');
             }
         }
 
         function toggleKeyModal() {
+            if (SERVER_MODE) return;
             const modal = document.getElementById('key-modal');
-            modal.classList.toggle('hidden');
+            if (modal) modal.classList.toggle('hidden');
         }
 
         function saveApiKey() {
+            if (SERVER_MODE) return;
             const key = document.getElementById('api-key-input').value.trim();
             if (key) {
                 localStorage.setItem('typesafe_api_key', key);
@@ -370,7 +383,7 @@
             const queryInput = document.getElementById('query-input').value.trim();
             if (!queryInput) return;
 
-            const apiKey = localStorage.getItem('typesafe_api_key') || '';
+            const apiKey = SERVER_MODE ? '' : (localStorage.getItem('typesafe_api_key') || '');
             const threshold = parseFloat(document.getElementById('threshold-select').value);
             const searchBtn = document.getElementById('search-btn');
             const loading = document.getElementById('loading');
@@ -405,7 +418,7 @@
                     applyFilters();
                 } else {
                     resultsContainer.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-center text-sm">${data.error || 'خطایی در پردازش رخ داد'}</div>`;
-                    if (data.error && data.error.includes('کلید API')) {
+                    if (!SERVER_MODE && data.error && data.error.includes('کلید API')) {
                         toggleKeyModal();
                     }
                 }
